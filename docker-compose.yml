@@ -1,0 +1,63 @@
+services:
+  gpu4pyscf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gpu4pyscf-rtx5070ti:latest
+    container_name: gpu4pyscf-dev
+
+    # Enable GPU access
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu, compute, utility ]
+
+    # Expose Jupyter port
+    ports:
+      - "8888:8888"
+
+    # Environment variables
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - CUDA_VISIBLE_DEVICES=0
+      - CUDA_CACHE_DISABLE=0
+      - CUDA_CACHE_PATH=/workspace/.nv_cache
+      - CUDA_CACHE_MAXSIZE=4294967296
+      - CUPY_CACHE_DIR=/workspace/.cupy_cache
+      - PYSCF_TMPDIR=/workspace/.pyscf_tmp
+      - TMPDIR=/workspace/.tmp
+
+    # Volume mounts
+    volumes:
+      # Mount current directory to /workspace
+      - .:/workspace
+      # Persist pip cache
+      - pip-cache:/root/.cache/pip
+      # Persist PySCF data
+      - pyscf-data:/root/.pyscf
+
+    # Working directory
+    working_dir: /workspace
+
+    # Keep container running
+    stdin_open: true
+    tty: true
+
+    # Network mode
+    network_mode: bridge
+
+    # Shared memory size (important for GPU operations)
+    shm_size: '2gb'
+    # Resource limits (optional, adjust as needed)
+    # mem_limit: 32g
+    # cpus: 8
+
+volumes:
+  pip-cache:
+    driver: local
+  pyscf-data:
+    driver: local
