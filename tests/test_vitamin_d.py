@@ -1,5 +1,7 @@
 import time
+import statistics
 from pyscf import gto
+from pyscf import dft as cpu_dft
 from gpu4pyscf import dft as gpu_dft
 
 # Vitamin D3 (Cholecalciferol) coordinates extracted from PubChem (CID 5280795)
@@ -80,37 +82,133 @@ H   -3.4208   -0.5914    2.4321
 H   -5.7073   -0.9711   -2.0857
 '''
 
+def run_cpu_calculation(mol, verbose=0):
+    """CPU並列計算を実行"""
+    mf = cpu_dft.RKS(mol)
+    mf.xc = 'WB97XD'
+    mf.verbose = verbose
+    start_time = time.time()
+    energy = mf.kernel()
+    elapsed_time = time.time() - start_time
+    return energy, elapsed_time
+
+
+def run_gpu_calculation(mol, verbose=0):
+    """GPU計算を実行"""
+    mf = gpu_dft.RKS(mol)
+    mf.xc = 'WB97XD'
+    mf.verbose = verbose
+    start_time = time.time()
+    energy = mf.kernel()
+    elapsed_time = time.time() - start_time
+    return energy, elapsed_time
+
+
+def print_statistics(times, label):
+    """統計情報を表示"""
+    mean_time = statistics.mean(times)
+    stdev_time = statistics.stdev(times) if len(times) > 1 else 0.0
+    min_time = min(times)
+    max_time = max(times)
+
+    print(f"{label}:")
+    print(f"  平均時間: {mean_time:.2f} 秒")
+    print(f"  標準偏差: {stdev_time:.2f} 秒")
+    print(f"  最小時間: {min_time:.2f} 秒")
+    print(f"  最大時間: {max_time:.2f} 秒")
+    return mean_time
+
+
 def test_vitamin_d():
-    print("=" * 60)
-    print("ビタミンD3 (コレカルシフェロール) B3LYP/6-31G(d) ベンチマーク")
-    print("=" * 60)
+    print("=" * 70)
+    print("ビタミンD3 (コレカルシフェロール) WB97XD/6-311G(d) ベンチマーク")
+    print("GPU vs CPU 並列計算比較 (10回実行)")
+    print("=" * 70)
 
     # Build molecule
     mol = gto.M(
         atom=vitamin_d_xyz,
         basis='6-311G(d)',
-        verbose=4
+        verbose=0
     )
 
-    # print(f"Formula: {mol.formula}")
     print(f"原子数: {mol.natm}")
     print(f"電子数: {mol.nelectron}")
     print(f"基底関数数: {mol.nao}")
-    print("-" * 60)
+    print("-" * 70)
 
-    # Run GPU calculation
-    print("GPU DFT計算を開始します...")
-    start_time = time.time()
+    # GPU warmup (初回JITコンパイル対策)
+    print("GPU ウォームアップ実行中 (初回JITコンパイル)...")
+    print("※ 初回は15-20分かかる場合があります")
+    warmup_energy, warmup_time = run_gpu_calculation(mol, verbose=0)
+    print(f"ウォームアップ完了: {warmup_time:.2f} 秒")
+    print(f"エネルギー: {warmup_energy:.8f} Hartree")
+    print("-" * 70)
 
-    mf = gpu_dft.RKS(mol)
-    mf.xc = 'WB97XD'
-    energy = mf.kernel()
+    # GPU benchmark (10 runs)
+    print("\nGPU計算ベンチマーク (10回実行)...")
+    gpu_times = []
+    gpu_energies = []
 
-    elapsed_time = time.time() - start_time
-    print("-" * 60)
-    print(f"計算完了: {elapsed_time:.2f} 秒")
-    print(f"全エネルギー: {energy:.8f} Hartree")
-    print("=" * 60)
+    for i in range(10):
+        print(f"  GPU Run {i+1}/10...", end=" ", flush=True)
+        energy, elapsed = run_gpu_calculation(mol, verbose=0)
+        gpu_times.append(elapsed)
+        gpu_energies.append(energy)
+        print(f"{elapsed:.2f} 秒")
+
+    print("-" * 70)
+
+    # CPU benchmark (10 runs)
+    print("\nCPU並列計算ベンチマーク (10回実行)...")
+    cpu_times = []
+    cpu_energies = []
+
+    for i in range(10):
+        print(f"  CPU Run {i+1}/10...", end=" ", flush=True)
+        energy, elapsed = run_cpu_calculation(mol, verbose=0)
+        cpu_times.append(elapsed)
+        cpu_energies.append(energy)
+        print(f"{elapsed:.2f} 秒")
+
+    print("=" * 70)
+
+    # 結果の統計表示
+    print("\n【統計結果】")
+    print("-" * 70)
+    gpu_mean = print_statistics(gpu_times, "GPU計算")
+    print()
+    cpu_mean = print_statistics(cpu_times, "CPU並列計算")
+    print("-" * 70)
+
+    # スピードアップ率
+    speedup = cpu_mean / gpu_mean
+    print(f"\n【パフォーマンス比較】")
+    print(f"スピードアップ率: {speedup:.2f}x (CPU/GPU)")
+
+    if speedup > 1:
+        print(f"→ GPUはCPUより {speedup:.2f}倍 高速")
+    else:
+        print(f"→ CPUはGPUより {1/speedup:.2f}倍 高速")
+
+    print("-" * 70)
+
+    # エネルギー値の比較
+    print(f"\n【計算結果の妥当性チェック】")
+    gpu_avg_energy = statistics.mean(gpu_energies)
+    cpu_avg_energy = statistics.mean(cpu_energies)
+    energy_diff = abs(gpu_avg_energy - cpu_avg_energy)
+
+    print(f"GPU平均エネルギー: {gpu_avg_energy:.8f} Hartree")
+    print(f"CPU平均エネルギー: {cpu_avg_energy:.8f} Hartree")
+    print(f"差分: {energy_diff:.2e} Hartree")
+
+    if energy_diff < 1e-6:
+        print("✓ GPU/CPU計算結果は一致しています")
+    else:
+        print("⚠ GPU/CPU計算結果に差異があります")
+
+    print("=" * 70)
 
 if __name__ == "__main__":
     test_vitamin_d()
