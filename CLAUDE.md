@@ -15,6 +15,8 @@ This is a GPU-accelerated quantum chemistry computation environment optimized fo
 - **PySCF**: Quantum chemistry calculations
 - **CuPy**: CUDA-accelerated NumPy
 - **Docker**: Containerized environment with GPU passthrough
+- **Automatic Memory Management**: Cache-free GPU memory cleanup utilities
+- **Google Colab Integration**: Fully automated memory management for Colab notebooks
 
 ## Common Development Commands
 
@@ -47,17 +49,20 @@ Execute the full test suite inside the container:
 docker compose exec gpu4pyscf python3 tests/test_gpu4pyscf.py
 ```
 
-Run specific test files:
+Run specific test files (all with automatic memory cleanup):
 ```bash
-docker compose exec gpu4pyscf python3 tests/test_vitamin_d.py
-docker compose exec gpu4pyscf python3 tests/test_vitamin_d_opt.py
-docker compose exec gpu4pyscf python3 tests/test_cupy_cache.py
+docker compose exec gpu4pyscf python3 tests/test_vitamin_d.py        # 20 consecutive runs
+docker compose exec gpu4pyscf python3 tests/test_vitamin_d_opt.py    # Geometry optimization
+docker compose exec gpu4pyscf python3 tests/test_memory_tracking.py  # Memory leak verification
+docker compose exec gpu4pyscf python3 tests/test_cupy_cache.py       # Cache test
 ```
 
 Run tests from inside the container:
 ```bash
 python3 tests/test_gpu4pyscf.py
 ```
+
+**All tests include automatic GPU memory cleanup - no memory leaks occur even with 20+ consecutive runs.**
 
 ### Running Python Scripts
 
@@ -119,7 +124,13 @@ Environment variables set in Dockerfile:
 
 ### Test Suite Structure
 
-**[tests/test_gpu4pyscf.py](tests/test_gpu4pyscf.py)**: Comprehensive test suite with 7 tests:
+**[tests/test_utils.py](tests/test_utils.py)**: Automatic GPU memory cleanup utilities:
+- `cleanup_gpu_memory()`: Frees CuPy memory pools and pinned memory
+- `full_cleanup()`: Complete cleanup of GPU memory + object deletion + garbage collection
+- `periodic_cleanup()`: Automatic cleanup for iterative calculations
+- Used by all test files to prevent memory leaks
+
+**[tests/test_gpu4pyscf.py](tests/test_gpu4pyscf.py)**: Comprehensive test suite with 7 tests (all with automatic memory cleanup):
 1. GPU detection and CUDA setup (CuPy verification)
 2. GPU4PySCF import verification
 3. CPU DFT calculation (H2O molecule, B3LYP/def2-svp)
@@ -128,11 +139,13 @@ Environment variables set in Dockerfile:
 6. Larger molecule test (benzene C6H6)
 7. Gradient calculation (forces on H2)
 
-**[tests/test_vitamin_d.py](tests/test_vitamin_d.py)**: Large molecule benchmark - Vitamin D3 (Cholecalciferol) using WB97XD/6-311G(d) functional. Tests realistic computational chemistry workload with 80 atoms.
+**[tests/test_vitamin_d.py](tests/test_vitamin_d.py)**: Large molecule benchmark - Vitamin D3 (Cholecalciferol, 80 atoms) using WB97XD/6-311G(d). Runs 10 GPU + 10 CPU calculations (20 total) with automatic memory cleanup after each run. No memory leaks occur.
 
-**[tests/test_vitamin_d_opt.py](tests/test_vitamin_d_opt.py)**: Geometry optimization test (likely extends test_vitamin_d.py).
+**[tests/test_vitamin_d_opt.py](tests/test_vitamin_d_opt.py)**: Geometry optimization test with automatic cleanup after 100-step optimization.
 
-**[tests/test_cupy_cache.py](tests/test_cupy_cache.py)**: Cache verification to ensure JIT-compiled kernels persist.
+**[tests/test_memory_tracking.py](tests/test_memory_tracking.py)**: Detailed memory leak verification - runs multiple tests to confirm no memory accumulation occurs.
+
+**[tests/test_cupy_cache.py](tests/test_cupy_cache.py)**: Cache verification to ensure JIT-compiled kernels persist, with automatic memory cleanup.
 
 ### Typical Workflow for Quantum Chemistry Calculations
 
@@ -156,16 +169,21 @@ Small molecules may show minimal or negative speedup due to JIT overhead.
 
 ```
 .
-├── Dockerfile              # CUDA 12.9.1 + GPU4PySCF build
-├── docker-compose.yml      # GPU passthrough + volume config
+├── Dockerfile                    # CUDA 12.9.1 + GPU4PySCF build
+├── docker-compose.yml            # GPU passthrough + volume config
 ├── scripts/
-│   ├── start-environment.sh  # Automated setup + prerequisite checks
-│   └── start-colab.sh       # Google Colab integration (optional)
+│   ├── start-environment.sh      # Automated setup + prerequisite checks
+│   └── start-colab.sh            # Google Colab integration
 ├── tests/
-│   ├── test_gpu4pyscf.py    # Primary test suite
-│   ├── test_vitamin_d.py    # Large molecule benchmark
-│   ├── test_vitamin_d_opt.py # Optimization test
-│   └── test_cupy_cache.py   # Cache persistence test
+│   ├── test_utils.py             # Automatic GPU memory cleanup utilities
+│   ├── test_gpu4pyscf.py         # Primary test suite (with auto cleanup)
+│   ├── test_vitamin_d.py         # Large molecule benchmark (20 runs)
+│   ├── test_vitamin_d_opt.py     # Optimization test
+│   ├── test_memory_tracking.py   # Memory leak verification test
+│   └── test_cupy_cache.py        # Cache persistence test
+├── colab/
+│   ├── colab_auto_cleanup.py     # IPython extension for auto cleanup
+│   └── tutorial_basic.ipynb      # Basic Colab tutorial notebook
 └── .pyscf_tmp/, .nv_cache/, .cupy_cache/  # Cache directories
 ```
 

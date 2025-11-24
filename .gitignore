@@ -2,3 +2,4 @@
 .nv_cache
 .pyscf_tmp
 .tmp
+__pycache__

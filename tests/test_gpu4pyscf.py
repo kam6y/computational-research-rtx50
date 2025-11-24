@@ -9,6 +9,7 @@ import time
 import traceback
 from pyscf import gto, dft
 import numpy as np
+from test_utils import cleanup_gpu_memory, full_cleanup
 
 def print_header(title):
     """Print a formatted header"""
@@ -67,6 +68,8 @@ def test_gpu_detection():
             print_error("CuPy operations failed")
             return False
 
+        # Cleanup GPU memory after test
+        cleanup_gpu_memory(verbose=False)
         return True
 
     except Exception as e:
@@ -132,6 +135,9 @@ def test_basic_dft_cpu():
         print_success(f"CPU calculation completed in {cpu_time:.3f} seconds")
         print_info(f"Total energy: {energy_cpu:.8f} Hartree")
 
+        # Cleanup CPU calculation objects
+        full_cleanup(mf_cpu, verbose=False)
+
         return True, energy_cpu, cpu_time, mol
 
     except Exception as e:
@@ -167,7 +173,11 @@ def test_basic_dft_gpu(mol, energy_cpu):
             print_success("GPU and CPU energies match within tolerance")
         else:
             print_error(f"Energy difference too large: {energy_diff}")
+            full_cleanup(mf_gpu, verbose=False)
             return False, None
+
+        # Cleanup GPU calculation objects
+        full_cleanup(mf_gpu, verbose=False)
 
         return True, gpu_time
 
@@ -244,6 +254,9 @@ def test_larger_molecule():
         print_success(f"Calculation completed in {gpu_time:.3f} seconds")
         print_info(f"Total energy: {energy_gpu:.8f} Hartree")
 
+        # Cleanup GPU calculation objects
+        full_cleanup(mol, mf_gpu, verbose=False)
+
         return True
 
     except Exception as e:
@@ -280,6 +293,9 @@ def test_gradient_calculation():
         print_info(f"Energy: {energy:.8f} Hartree")
         print_info(f"Forces shape: {forces.shape}")
         print_info(f"Max force: {np.max(np.abs(forces)):.6f} Hartree/Bohr")
+
+        # Cleanup GPU calculation objects
+        full_cleanup(mol, mf_gpu, grad, verbose=False)
 
         return True
 
@@ -334,6 +350,10 @@ def run_all_tests():
         print(f"{test_name:30s} {status}")
 
     print(f"\nTotal: {passed}/{total} tests passed")
+
+    # Final cleanup of all GPU memory and cache
+    print_header("Final Cleanup")
+    cleanup_gpu_memory(verbose=True)
 
     if passed == total:
         print_success("\nAll tests passed! GPU4PySCF is working correctly.")

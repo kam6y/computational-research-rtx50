@@ -2,6 +2,7 @@ import time
 from pyscf import gto
 from pyscf.geomopt.geometric_solver import optimize
 from gpu4pyscf import dft as gpu_dft
+from test_utils import full_cleanup
 
 # Vitamin D3 (Cholecalciferol) coordinates extracted from PubChem (CID 5280795)
 # Format: Symbol X Y Z
@@ -113,6 +114,11 @@ def test_vitamin_d_opt():
     print(f"計算完了: {elapsed_time:.2f} 秒")
     print(f"最適化された構造:")
     print(mol_eq.tostring())
+    print("=" * 60)
+
+    # 最適化完了後のメモリクリーンアップ
+    print("\n【最終メモリクリーンアップ】")
+    full_cleanup(mol, mol_eq, mf, verbose=True)
     print("=" * 60)
 
 if __name__ == "__main__":

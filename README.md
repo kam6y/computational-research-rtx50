@@ -11,6 +11,8 @@ NVIDIA RTX 5070 Ti上でGPU加速された量子化学計算（GPU4PySCF）を�
 - **NVIDIA RTX 5070 Ti最適化**: Blackwell世代GPU（compute capability 10.0）に対応
 - **CUDA 12.9.1**: 最新のCUDAツールキット
 - **GPU4PySCF v1.4.0**: GPU加速されたPySCF
+- **完全自動メモリ管理**: キャッシュを一切意識せずに使える自動クリーンアップ機能
+- **Google Colab統合**: ローカルGPUをColabから使える完全自動化環境
 - **完全なテストスイート**: GPU動作確認、性能比較、各種計算テスト
 - **簡単セットアップ**: 自動化されたビルドと起動スクリプト
 
@@ -98,12 +100,30 @@ chmod +x scripts/start-environment.sh
 - Dockerイメージのビルド
 - コンテナの起動
 
-### 3. Google Colabとの接続（オプション）
-この環境をGoogle Colabのローカルランタイムとして使用する場合：
+### 3. Google Colabとの接続（完全自動メモリ管理）
 
+この環境をGoogle Colabのローカルランタイムとして使用できます。**完全自動メモリクリーンアップ機能**により、キャッシュやメモリ管理を一切意識する必要がありません。
+
+#### WSL2側の準備
 ```bash
 ./scripts/start-colab.sh
 ```
+
+#### Colab側の接続
+1. [Google Colab](https://colab.research.google.com/)を開く
+2. 右上「接続」→「ローカルランタイムに接続」
+3. 表示されたURL（`http://localhost:8888/?token=...`）を入力
+
+#### 自動メモリクリーンアップの有効化
+ノートブックの最初のセルで以下を実行するだけ：
+
+```python
+import sys
+sys.path.append('/workspace/colab')
+%load_ext colab_auto_cleanup
+```
+
+**これだけで、以降すべてのセル実行後に自動的にGPUメモリがクリーンアップされます！**
 
 ---
 
@@ -141,10 +161,13 @@ docker compose down
 コンテナが起動したら、付属のテストスイートを実行して動作を確認します。
 
 ```bash
-python3 tests/test_gpu4pyscf.py
-python3 tests/test_vitamin_d.py
-python3 tests/test_vitamin_d_opt.py
+python3 tests/test_gpu4pyscf.py        # 基本テスト（自動メモリ管理付き）
+python3 tests/test_vitamin_d.py        # 大規模ベンチマーク（20回連続実行）
+python3 tests/test_vitamin_d_opt.py    # 構造最適化テスト
+python3 tests/test_memory_tracking.py  # メモリ管理の詳細検証
 ```
+
+**すべてのテストに自動メモリクリーンアップが組み込まれており、メモリリークは発生しません。**
 
 ### テスト内容
 1. **GPU検出**: CuPy、CUDA、GPU情報の確認
@@ -153,6 +176,7 @@ python3 tests/test_vitamin_d_opt.py
 4. **性能比較**: CPU vs GPUの速度比較
 5. **大規模分子**: ベンゼン分子での計算テスト
 6. **勾配計算**: 力の計算テスト
+7. **メモリ管理検証**: 連続実行でのメモリリーク確認
 
 ---
 
@@ -214,16 +238,25 @@ cmake -B build -S gpu4pyscf/lib \
 
 ```
 .
-├── Dockerfile              # RTX 5070 Ti最適化済みDockerfile
-├── docker-compose.yml      # GPU有効化設定を含むDocker Compose設定
+├── Dockerfile                       # RTX 5070 Ti最適化済みDockerfile
+├── docker-compose.yml               # GPU有効化設定を含むDocker Compose設定
 ├── scripts/
-│   ├── start-environment.sh # 環境起動スクリプト
-│   └── start-colab.sh       # Colab接続用スクリプト
+│   ├── start-environment.sh         # 環境起動スクリプト
+│   └── start-colab.sh               # Colab接続用スクリプト
 ├── tests/
-│   ├── test_gpu4pyscf.py    # 包括的なテストスイート
-│   └── test_cupy_cache.py   # キャッシュテスト用
-├── README.md               # このファイル
-└── .dockerignore           # Dockerビルド最適化
+│   ├── test_utils.py                # メモリ管理ユーティリティ（自動クリーンアップ）
+│   ├── test_gpu4pyscf.py            # 包括的なテストスイート
+│   ├── test_vitamin_d.py            # 大規模ベンチマーク（20回連続）
+│   ├── test_vitamin_d_opt.py        # 構造最適化テスト
+│   ├── test_memory_tracking.py      # メモリ管理詳細検証
+│   └── test_cupy_cache.py           # キャッシュテスト用
+├── colab/
+│   ├── README.md                    # Colab統合ガイド
+│   ├── colab_auto_cleanup.py        # Colab用自動メモリクリーンアップ拡張
+│   └── tutorial_basic.ipynb         # Colab基本チュートリアル
+├── README.md                        # このファイル
+├── CLAUDE.md                        # プロジェクト詳細ガイド（英語）
+└── .dockerignore                    # Dockerビルド最適化
 ```
 
 ## 参考資料

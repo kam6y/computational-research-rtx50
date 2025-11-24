@@ -3,6 +3,7 @@ import statistics
 from pyscf import gto
 from pyscf import dft as cpu_dft
 from gpu4pyscf import dft as gpu_dft
+from test_utils import cleanup_gpu_memory, full_cleanup
 
 # Vitamin D3 (Cholecalciferol) coordinates extracted from PubChem (CID 5280795)
 # Format: Symbol X Y Z
@@ -90,6 +91,10 @@ def run_cpu_calculation(mol, verbose=0):
     start_time = time.time()
     energy = mf.kernel()
     elapsed_time = time.time() - start_time
+
+    # Cleanup CPU calculation objects
+    full_cleanup(mf, verbose=False)
+
     return energy, elapsed_time
 
 
@@ -101,6 +106,10 @@ def run_gpu_calculation(mol, verbose=0):
     start_time = time.time()
     energy = mf.kernel()
     elapsed_time = time.time() - start_time
+
+    # Cleanup GPU calculation objects
+    full_cleanup(mf, verbose=False)
+
     return energy, elapsed_time
 
 
@@ -143,6 +152,10 @@ def test_vitamin_d():
     warmup_energy, warmup_time = run_gpu_calculation(mol, verbose=0)
     print(f"ウォームアップ完了: {warmup_time:.2f} 秒")
     print(f"エネルギー: {warmup_energy:.8f} Hartree")
+
+    # ウォームアップ後のメモリクリーンアップ
+    print("ウォームアップ後のメモリクリーンアップ中...")
+    cleanup_gpu_memory(verbose=False)
     print("-" * 70)
 
     # GPU benchmark (10 runs)
@@ -208,6 +221,11 @@ def test_vitamin_d():
     else:
         print("⚠ GPU/CPU計算結果に差異があります")
 
+    print("=" * 70)
+
+    # 最終クリーンアップ
+    print("\n【最終メモリクリーンアップ】")
+    full_cleanup(mol, verbose=True)
     print("=" * 70)
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import cupy as cp
 import time
 import os
+from test_utils import cleanup_gpu_memory
 
 print(f"CUDA_CACHE_PATH: {os.environ.get('CUDA_CACHE_PATH')}")
 print(f"CUDA_CACHE_DISABLE: {os.environ.get('CUDA_CACHE_DISABLE')}")
@@ -24,3 +25,7 @@ print(f"Compilation/Loading took: {end - start:.4f}s")
 x = cp.ones((1024,), dtype=cp.float32)
 kernel((1,), (1024,), (x,))
 print(f"Result: {x[0]}")
+
+# カーネル実行後のメモリクリーンアップ
+print("\n[Cleaning up GPU memory]")
+cleanup_gpu_memory(verbose=True)
